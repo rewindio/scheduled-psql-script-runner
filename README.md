@@ -21,11 +21,13 @@ Before running the package script you *MUST* download the Lambda-specfic version
 
 Within the S3 bucket created by the cloudformation stack, create the following tree:
 
+<pre> 
 scripts
     |
     |--daily
     |--hourly
     |--weekly
+</pre>
 
 Place any scripts you wish to have executed on the desired frequency into the respective folder.  Scripts should be named with a `.sql` extension and should *NOT* contain a trailing `;` as a query terminator
 
