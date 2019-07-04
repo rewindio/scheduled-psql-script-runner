@@ -1,0 +1,206 @@
+AWSTemplateFormatVersion: 2010-09-09
+Transform: 'AWS::Serverless-2016-10-31'
+
+Description: >
+  Scheduled Lambda function to run arbitrary SQL scripts against RDS postgres databases.
+
+####################################################################################
+Parameters:
+####################################################################################
+
+  LambdaRate:
+    Description: >
+      The rate (frequency) that determines when CloudWatch Events runs the rule that
+      triggers the Lambda function.
+    Default: cron(0 4 * * ? *)
+    Type: String
+
+  S3BucketName:
+    Description: > 
+      S3 bucket name to create which will store the queries to execute and the
+      query output results
+    Type: String
+
+  DBHost:
+    Description: > 
+      The hostname/endpoint of the database to query
+    Type: String 
+
+  DBName:
+    Description: > 
+      The name of the database
+    Type: String 
+  
+  DBUser: 
+    Description: > 
+      Username to connect to the DB as
+    Type: String 
+
+  DBPassSSMName:
+    Description: > 
+      Name of a SecureString in AWS Parameter store that contains the database password
+    Type: String
+
+  VPCId:
+    Description: VPC to launch the Lambda function in 
+    Type: AWS::EC2::VPC::Id
+  
+  VPCSubnet:
+    Description: Subnet to launch the Lambda function in
+    Type: AWS::EC2::Subnet::Id
+
+  SecurityGroup:
+    Description: A pre-existing security group which allows access to the RDS database
+    Type: AWS::EC2::SecurityGroup::Id
+
+
+####################################################################################
+Resources:
+####################################################################################
+
+  ScriptAndResultsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      BucketName: !Ref S3BucketName
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+
+  LambdaExecutionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: psql_lambda_function
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Action:
+                - "s3:put*"
+                - "s3:get*"
+                Effect: Allow
+                Resource: !Sub '${ScriptAndResultsBucket.Arn}/*'
+              
+              - Action:
+                - "s3:ListBucket"
+                Effect: Allow
+                Resource: !Sub '${ScriptAndResultsBucket.Arn}'
+
+              - Action:
+                - "ec2:CreateNetworkInterface"
+                - "ec2:DescribeNetworkInterfaces"
+                - "ec2:DeleteNetworkInterface"
+                Effect: Allow
+                Resource: "*"
+
+              - Action:
+                - "ssm:GetParameter"
+                - "ssm:GetParameters"
+                - "ssm:GetParametersByPath"
+                Effect: Allow
+                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${DBPassSSMName}'
+
+              - Action:
+                - "kms:Decrypt"
+                Effect: Allow
+                Resource: "*" # TODO: Limit the key by ID
+
+  Daily:
+    Type: "AWS::Events::Rule"
+    Properties:
+      Description: >
+        A schedule for the DAILY execution of the Lambda function.
+      ScheduleExpression: 'cron(0 4 * * ? *)' # Midight EST every day
+      State: ENABLED
+      Targets:
+        - Arn: !Sub ${LambdaFunction.Arn}
+          Id: Daily
+          Input: '{ "frequency": "daily" }'
+
+  DailyPermission:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !Sub ${LambdaFunction.Arn}
+      Principal: 'events.amazonaws.com'
+      SourceArn: !Sub ${Daily.Arn}
+
+  Weekly:
+    Type: "AWS::Events::Rule"
+    Properties:
+      Description: >
+        A schedule for the WEEKLY execution of the Lambda function.
+      ScheduleExpression: 'cron(0 4 ? * L *)' # Midight EST on last day of week
+      State: ENABLED
+      Targets:
+        - Arn: !Sub ${LambdaFunction.Arn}
+          Id: Weekly
+          Input: '{ "frequency": "weekly" }'
+
+  WeeklyPermission:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !Sub ${LambdaFunction.Arn}
+      Principal: 'events.amazonaws.com'
+      SourceArn: !Sub ${Weekly.Arn}
+
+
+  Monthly:
+    Type: "AWS::Events::Rule"
+    Properties:
+      Description: >
+        A schedule for the MONTHLY execution of the Lambda function.
+      ScheduleExpression: 'cron(0 4 L * ? *)' # Midight EST on last day of month
+      State: ENABLED
+      Targets:
+        - Arn: !Sub ${LambdaFunction.Arn}
+          Id: Monthly
+          Input: '{ "frequency": "monthly" }'
+
+  MonthlyPermission:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !Sub ${LambdaFunction.Arn}
+      Principal: 'events.amazonaws.com'
+      SourceArn: !Sub ${Monthly.Arn}
+
+  LambdaFunction:
+    Type: "AWS::Serverless::Function"
+    Properties:
+      Description: >
+        Lambda function that runs SQL scripts
+      CodeUri: ./src
+      Handler: psql-runner.lambda_handler
+      MemorySize: 128
+      Timeout: 900
+      Role: !Sub ${LambdaExecutionRole.Arn}
+      Runtime: python3.7
+      VpcConfig:
+        SecurityGroupIds: 
+          - !Ref SecurityGroup
+        SubnetIds:
+          - !Ref VPCSubnet
+      Environment:
+        Variables:
+          S3_BUCKET: !Ref ScriptAndResultsBucket
+          DB_HOST: !Ref DBHost
+          DB_NAME: !Ref DBName
+          DB_USER: !Ref DBUser
+          DB_PASS_ARN: !Ref DBPassSSMName
