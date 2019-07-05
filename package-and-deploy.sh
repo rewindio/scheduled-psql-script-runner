@@ -9,6 +9,7 @@ DB_PASS_NAME=$6
 VPC=$7
 SUBNET=$8
 SG=$9
+PROFILE=${10}
 
 echo "Installing Python dependencies"
 echo "Make sure you have downloaded https://github.com/jkehler/awslambda-psycopg2 into the src folder"
@@ -23,7 +24,8 @@ echo "Packaging Lambda function for deploy"
 aws cloudformation package \
     --template-file ./template.yml \
     --s3-bucket ${LAMBDA_S3_BUCKET} \
-    --output-template-file packaged-template.yml
+    --output-template-file packaged-template.yml \
+    --profile ${PROFILE}
 
 STATUS=$?
 
@@ -42,7 +44,8 @@ if [ "${STATUS}" -eq 0 ]; then
             VPCId=${VPC} \
             VPCSubnet=${SUBNET} \
             SecurityGroup=${SG} \
-        --stack-name psql-script-runner-${DB_NAME}
+        --stack-name psql-script-runner-${DB_NAME} \
+        --profile ${PROFILE}
 else
     echo "Package step failed - not deploying function"
 fi
