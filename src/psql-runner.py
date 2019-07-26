@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import tempfile
 import datetime
 import boto3
@@ -114,6 +115,12 @@ def write_results_to_s3(bucket, frequency, dt_str, script, output_filename):
         transfer.upload_file(output_filename, bucket, output_key, extra_args={'ServerSideEncryption': "AES256"})
     except ClientError as ex:
         print("Unable to write to S3: {}".format(ex.response['Error']['Code'])) 
+
+def sql_allowed(sql):
+    if re.search('delete from', sql, re.IGNORECASE):
+        return False
+    else:
+        return True
     
 def run_scripts(frequency):
     db_password = None
@@ -140,14 +147,21 @@ def run_scripts(frequency):
                 for script in script_file_names:
                     print("Running script: {}".format(script))
                     sql = read_file_from_s3(s3_bucket, script)
+                    print("The SQL is: {}".format(sql))
                     
-                    # The DB query results are written to a file in CSV format
-                    results_file = tempfile.NamedTemporaryFile(mode='w')
-                    fetch_data_to_file(db_conn, sql, results_file.name)
+                    # We don't want to allow certain SQL (ie. deletes!)
+                    if sql_allowed(sql):
+                        print("SQL query in file {} is allowed.  Running...".format(script))
                     
-                    write_results_to_s3(s3_bucket, frequency, dt_str, script, results_file.name)
-                    
-                    results_file.close()
+                        # The DB query results are written to a file in CSV format
+                        results_file = tempfile.NamedTemporaryFile(mode='w')
+                        fetch_data_to_file(db_conn, sql, results_file.name)
+                        
+                        write_results_to_s3(s3_bucket, frequency, dt_str, script, results_file.name)
+                        
+                        results_file.close()
+                    else:
+                        print("Not running SQL in file {} as it contains destructive commands".format(results_file.name))
                 
                 db_conn.close()
             else:
