@@ -125,7 +125,7 @@ Resources:
     Properties:
       Description: >
         A schedule for the DAILY execution of the Lambda function.
-      ScheduleExpression: 'cron(0 4 * * ? *)' # Midight EST every day
+      ScheduleExpression: 'cron(59 23 * * ? *)' # Midight GMT every day
       State: ENABLED
       Targets:
         - Arn: !Sub ${LambdaFunction.Arn}
@@ -145,7 +145,7 @@ Resources:
     Properties:
       Description: >
         A schedule for the WEEKLY execution of the Lambda function.
-      ScheduleExpression: 'cron(0 4 ? * L *)' # Midight EST on last day of week
+      ScheduleExpression: 'cron(59 23 ? * L *)' # Midight GMT on last day of week
       State: ENABLED
       Targets:
         - Arn: !Sub ${LambdaFunction.Arn}
@@ -166,7 +166,7 @@ Resources:
     Properties:
       Description: >
         A schedule for the MONTHLY execution of the Lambda function.
-      ScheduleExpression: 'cron(0 4 L * ? *)' # Midight EST on last day of month
+      ScheduleExpression: 'cron(59 23 L * ? *)' # Midight GMT on last day of month
       State: ENABLED
       Targets:
         - Arn: !Sub ${LambdaFunction.Arn}
