@@ -166,7 +166,7 @@ Resources:
     Properties:
       Description: >
         A schedule for the MONTHLY execution of the Lambda function.
-      ScheduleExpression: 'cron(59 23 L * ? *)' # Midight GMT on last day of month
+      ScheduleExpression: 'cron(0 6 1 * ? *)' # 6am GMT on first day of month
       State: ENABLED
       Targets:
         - Arn: !Sub ${LambdaFunction.Arn}
