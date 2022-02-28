@@ -53,6 +53,10 @@ Parameters:
     Description: A pre-existing security group which allows access to the RDS database
     Type: AWS::EC2::SecurityGroup::Id
 
+  SSMKMSKeyId:
+    Description: The KMS Key ID for the AWS managed key aws/ssm for the account to be deployed to
+    Type: String
+
 
 ####################################################################################
 Resources:
@@ -118,7 +122,7 @@ Resources:
               - Action:
                 - "kms:Decrypt"
                 Effect: Allow
-                Resource: "*" # TODO: Limit the key by ID
+                Resource: !Sub 'arn:aws:kms::${AWS::AccountId}:key/${SSMKMSKeyId}'
 
   Daily:
     Type: "AWS::Events::Rule"
