@@ -9,7 +9,8 @@ DB_PASS_NAME=$6
 VPC=$7
 SUBNET=$8
 SG=$9
-PROFILE=${10}
+KMS_ID=${10}
+PROFILE=${11}
 
 echo "Installing Python dependencies"
 echo "Make sure you have downloaded https://github.com/jkehler/awslambda-psycopg2 into the src folder"
@@ -44,6 +45,7 @@ if [ "${STATUS}" -eq 0 ]; then
             VPCId=${VPC} \
             VPCSubnet=${SUBNET} \
             SecurityGroup=${SG} \
+            SSMKMSKeyId=${KMS_ID} \
         --stack-name psql-script-runner-${DB_NAME} \
         --profile ${PROFILE}
 else
